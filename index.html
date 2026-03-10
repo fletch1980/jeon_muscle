@@ -573,30 +573,78 @@ function logEx(day,name,ids){
 
 // ── HISTORY ──
 var dayLabel={mon:'Monday — Push',tue:'Tuesday — Pull',wed:'Wednesday — Legs',thu:'Thursday — Core',fri:'Friday — Full Body'};
+var expandedDates={};
+
+function friendlyDate(d){
+  var parts=d.split('-');
+  var dt=new Date(parseInt(parts[0]),parseInt(parts[1])-1,parseInt(parts[2]));
+  return dt.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'});
+}
+
 function renderHistory(){
   var logs=getLogs();
   var el=document.getElementById('historyList');
   if(!logs.length){el.innerHTML='<div class="empty-msg">No exercises logged yet.<br>Tap a workout day, fill in your sets, and hit Save Log ✓</div>';return;}
-  var groups={};
-  logs.forEach(function(l,idx){
+
+  // Group by date first, then by day within each date
+  var byDate={};
+  logs.forEach(function(l){
+    if(!byDate[l.date]) byDate[l.date]={};
     var k=l.date+'||'+l.day;
-    if(!groups[k]) groups[k]={date:l.date,day:l.day,entries:[],indices:[]};
-    groups[k].entries.push('<b>'+l.exercise+'</b><br>'+l.sets.join(' · '));
-    groups[k].indices.push(idx);
+    if(!byDate[l.date][k]) byDate[l.date][k]={date:l.date,day:l.day,entries:[]};
+    byDate[l.date][k].entries.push({name:l.exercise,sets:l.sets});
   });
-  var keys=Object.keys(groups).sort(function(a,b){return b.localeCompare(a);});
-  el.innerHTML=keys.map(function(k){
-    var g=groups[k];
-    var label=dayLabel[g.day]||g.day;
-    var safeKey=k.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
-    return '<div class="history-entry">'
-      +'<button class="h-del" onclick="deleteEntry(\''+safeKey+'\')">✕ Delete</button>'
-      +'<div class="h-date">'+g.date+'</div>'
-      +'<div class="h-day">'+label+'</div>'
-      +'<div class="h-ex">'+g.entries.join('<br><br>')+'</div>'
+
+  var dates=Object.keys(byDate).sort(function(a,b){return b.localeCompare(a);});
+  el.innerHTML=dates.map(function(date){
+    var isOpen=expandedDates[date]!==false; // default open
+    var dayGroups=byDate[date];
+    var keys=Object.keys(dayGroups);
+    var totalEx=logs.filter(function(l){return l.date===date;}).length;
+
+    var innerHtml=keys.map(function(k){
+      var g=dayGroups[k];
+      var label=dayLabel[g.day]||g.day;
+      var safeKey=k.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+      var exRows=g.entries.map(function(e){
+        return '<div style="margin-bottom:10px">'
+          +'<div style="font-size:13px;font-weight:800;color:#e9d5ff;margin-bottom:3px">'+e.name+'</div>'
+          +'<div style="font-size:12px;color:#a78bfa;line-height:1.7">'+e.sets.join('<br>')+'</div>'
+          +'</div>';
+      }).join('');
+      return '<div style="background:#0d0020;border-radius:10px;padding:10px 12px;margin-bottom:8px;border:1px solid #7c3aed33">'
+        +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'
+        +'<div style="font-size:11px;font-weight:800;color:#c084fc;letter-spacing:1px;text-transform:uppercase">'+label+'</div>'
+        +'<button class="h-del" onclick="deleteEntry(\''+safeKey+'\')">✕ Delete</button>'
+        +'</div>'
+        +exRows
+        +'</div>';
+    }).join('');
+
+    return '<div style="background:#1a0030;border-radius:14px;margin-bottom:10px;border:1px solid #7c3aed22;overflow:hidden">'
+      +'<div style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px;cursor:pointer;user-select:none" onclick="toggleDate(\''+date+'\')">'
+      +'<div>'
+      +'<div style="font-size:15px;font-weight:900;color:white">📅 '+date+'</div>'
+      +'<div style="font-size:11px;color:#9ca3af;margin-top:2px">'+friendlyDate(date)+' · '+totalEx+' exercise'+(totalEx!==1?'s':'')+'</div>'
+      +'</div>'
+      +'<div id="arrow-'+date+'" style="color:#c084fc;font-size:16px;transition:transform .2s;transform:rotate('+(isOpen?'180':'0')+'deg)">▾</div>'
+      +'</div>'
+      +'<div id="dateBody-'+date+'" style="display:'+(isOpen?'block':'none')+';padding:0 12px 12px">'
+      +innerHtml
+      +'</div>'
       +'</div>';
   }).join('');
 }
+
+function toggleDate(date){
+  expandedDates[date]=(expandedDates[date]===false)?true:false;
+  var body=document.getElementById('dateBody-'+date);
+  var arrow=document.getElementById('arrow-'+date);
+  var open=expandedDates[date]!==false;
+  body.style.display=open?'block':'none';
+  arrow.style.transform='rotate('+(open?'180':'0')+'deg)';
+}
+
 function deleteEntry(key){
   var parts=key.split('||'),date=parts[0],day=parts[1];
   var logs=getLogs().filter(function(l){return !(l.date===date&&l.day===day);});
